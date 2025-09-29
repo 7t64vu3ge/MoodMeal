@@ -43,15 +43,3 @@ A user-friendly mobile app that helps users track their meals and moods, provide
 - **Week 8:** Testing, bug fixes, deployment  
 
 ---
-
-# 🚀 Project Setup Guide  
-
-## Prerequisites  
-- [Node.js](https://nodejs.org/) (LTS version recommended)  
-- [Expo Go](https://expo.dev/client) app installed on mobile device  
-- Git for version control  
-
-## 1. Create React Native Project  
-```bash
-npx create-expo-app MoodMeal
-cd MoodMeal
