@@ -36,10 +36,11 @@ A mobile app where users log their meals and rate their mood throughout the day.
 A user-friendly mobile app that helps users track their meals and moods, provides clear insights on how diet affects their emotional well-being, and encourages healthier habits through personalized suggestions.  
 
 ## 9. Timeline (Optional)  
-- **Week 1–2:** Requirement gathering, UI/UX design  
-- **Week 3–4:** Set up backend, database schema, and APIs  
-- **Week 5–6:** Develop mobile app UI and integrate APIs  
-- **Week 7:** Implement data analytics and recommendations  
-- **Week 8:** Testing, bug fixes, deployment  
+- **Week 1–2**: Project setup, navigation, basic screens  
+- **Week 3–4**: Meal & mood logging with AsyncStorage  
+- **Week 5**: Correlation logic + filters (Today/7 Days/All Time)  
+- **Week 6**: Charts for analytics (Pie/Bar)  
+- **Week 7**: Notifications + data export  
+- **Week 8**: UI polish, testing, deployment
 
 ---
