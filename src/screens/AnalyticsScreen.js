@@ -11,7 +11,6 @@ export default function AnalyticsScreen() {
   const [patterns, setPatterns] = useState([]);
   const [filter, setFilter] = useState('all'); // today | week | all
 
-  // Load meals & moods when screen mounts
   useEffect(() => {
     const loadData = async () => {
       const storedMeals = JSON.parse(await AsyncStorage.getItem('meals')) || [];
@@ -26,7 +25,6 @@ export default function AnalyticsScreen() {
     loadData();
   }, [filter]);
 
-  // 🧠 Compute meal → mood correlation with percentages
   const computePatterns = (meals, moods, filterType) => {
     let result = {};
 
@@ -46,7 +44,6 @@ export default function AnalyticsScreen() {
     filteredMoods.forEach((moodEntry) => {
       const moodTime = new Date(moodEntry.time);
 
-      // Find the last meal before this mood
       const previousMeals = meals.filter(
         (meal) => new Date(meal.time) <= moodTime
       );
@@ -63,7 +60,6 @@ export default function AnalyticsScreen() {
       result[lastMeal.meal][moodEntry.mood] += 1;
     });
 
-    // Convert counts to percentages
     return Object.entries(result).map(([meal, moodCounts]) => {
       const total = Object.values(moodCounts).reduce((a, b) => a + b, 0);
       const moodPercents = {};
@@ -78,7 +74,6 @@ export default function AnalyticsScreen() {
     <ScrollView style={styles.container}>
       <Text style={styles.heading}>Meal → Mood Correlations</Text>
 
-      {/* Filter Buttons */}
       <View style={styles.filterRow}>
         <Button title="Today" onPress={() => setFilter('today')} />
         <Button title="Last 7 Days" onPress={() => setFilter('week')} />
@@ -89,7 +84,6 @@ export default function AnalyticsScreen() {
         <Text style={styles.empty}>Not enough data yet.</Text>
       ) : (
         patterns.map((item, index) => {
-          // Prepare chart data
           const chartData = Object.entries(item.moods).map(([mood, percent], i) => ({
             name: `${mood} (${percent}%)`,
             population: parseFloat(percent),
@@ -126,7 +120,6 @@ export default function AnalyticsScreen() {
   );
 }
 
-// 🎨 Some chart colours
 const chartColors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'];
 
 const styles = StyleSheet.create({
