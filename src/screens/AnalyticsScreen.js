@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, Button, Dimensions, ScrollView } from 'react-native';
+import { View, Text, FlatList, StyleSheet, Button, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PieChart } from 'react-native-chart-kit';
 
-const screenWidth = Dimensions.get('window').width;
 
 export default function AnalyticsScreen() {
   const [meals, setMeals] = useState([]);
   const [moods, setMoods] = useState([]);
   const [patterns, setPatterns] = useState([]);
-  const [filter, setFilter] = useState('all'); // today | week | all
+  const [filter, setFilter] = useState('all');
 
   useEffect(() => {
     const loadData = async () => {
