@@ -1,143 +1,197 @@
-import { useEffect, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, Button, ScrollView } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PieChart } from 'react-native-chart-kit';
+import React, { useState, useCallback } from 'react'
+import { View, Text, StyleSheet, ScrollView, Dimensions, RefreshControl } from 'react-native'
+import { LineChart } from 'react-native-chart-kit'
+import { useFocusEffect } from '@react-navigation/native'
+import { StorageService } from '../services/StorageService'
+import Card from '../components/Card'
+import { useTheme } from '../context/ThemeContext'
+import { SPACING, FONTS, SHADOWS } from '../constants/theme'
 
+const screenWidth = Dimensions.get('window').width
 
 export default function AnalyticsScreen() {
-  const [meals, setMeals] = useState([]);
-  const [moods, setMoods] = useState([]);
-  const [patterns, setPatterns] = useState([]);
-  const [filter, setFilter] = useState('all');
+  const { theme } = useTheme()
+  const [moodData, setMoodData] = useState(null)
+  const [correlations, setCorrelations] = useState([])
+  const [refreshing, setRefreshing] = useState(false)
 
-  useEffect(() => {
-    const loadData = async () => {
-      const storedMeals = JSON.parse(await AsyncStorage.getItem('meals')) || [];
-      const storedMoods = JSON.parse(await AsyncStorage.getItem('moods')) || [];
-      setMeals(storedMeals);
-      setMoods(storedMoods);
+  const loadData = async () => {
+    const meals = await StorageService.getMeals()
+    const moods = await StorageService.getMoods()
+    processData(meals, moods)
+  }
 
-      const foundPatterns = computePatterns(storedMeals, storedMoods, filter);
-      setPatterns(foundPatterns);
-    };
+  const processData = (meals, moods) => {
+    // 1. prepare chart data (last 7 days)
+    if (moods.length > 0) {
+      // sort moods by time
+      const sortedMoods = [...moods].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
 
-    loadData();
-  }, [filter]);
+      // take last 7 entries for simplicity
+      const recentMoods = sortedMoods.slice(-7)
 
-  const computePatterns = (meals, moods, filterType) => {
-    let result = {};
+      const labels = recentMoods.map(m => {
+        const date = new Date(m.timestamp)
+        return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`
+      })
+      const dataPoints = recentMoods.map(m => m.value)
 
-    const now = new Date();
-    let filteredMoods = moods;
-
-    if (filterType === 'today') {
-      filteredMoods = moods.filter(
-        (m) => new Date(m.time).toDateString() === now.toDateString()
-      );
-    } else if (filterType === 'week') {
-      const oneWeekAgo = new Date();
-      oneWeekAgo.setDate(now.getDate() - 7);
-      filteredMoods = moods.filter((m) => new Date(m.time) >= oneWeekAgo);
+      setMoodData({
+        labels,
+        datasets: [{ data: dataPoints }]
+      })
+    } else {
+      setMoodData(null)
     }
 
-    filteredMoods.forEach((moodEntry) => {
-      const moodTime = new Date(moodEntry.time);
+    // 2. simple correlation logic
+    // find meals eaten within 2 hours before a "Happy" or "Energetic" mood (value >= 4)
+    const positiveMoods = moods.filter(m => m.value >= 4)
+    const correlationsFound = []
 
-      const previousMeals = meals.filter(
-        (meal) => new Date(meal.time) <= moodTime
-      );
-      if (previousMeals.length === 0) return;
+    positiveMoods.forEach(mood => {
+      const moodTime = new Date(mood.timestamp).getTime()
+      // look for meals 2 hours before
+      const relevantMeals = meals.filter(meal => {
+        const mealTime = new Date(meal.timestamp).getTime()
+        const diff = moodTime - mealTime
+        return diff > 0 && diff <= 2 * 60 * 60 * 1000 // 2 hours in ms
+      })
 
-      const lastMeal = previousMeals[previousMeals.length - 1];
+      relevantMeals.forEach(meal => {
+        correlationsFound.push({
+          meal: meal.foodName,
+          mood: mood.mood,
+          emoji: mood.emoji
+        })
+      })
+    })
 
-      if (!result[lastMeal.meal]) {
-        result[lastMeal.meal] = {};
-      }
-      if (!result[lastMeal.meal][moodEntry.mood]) {
-        result[lastMeal.meal][moodEntry.mood] = 0;
-      }
-      result[lastMeal.meal][moodEntry.mood] += 1;
-    });
+    // remove duplicates and take top 5
+    const uniqueCorrelations = [...new Set(correlationsFound.map(JSON.stringify))].map(JSON.parse)
+    setCorrelations(uniqueCorrelations.slice(0, 5))
+  }
 
-    return Object.entries(result).map(([meal, moodCounts]) => {
-      const total = Object.values(moodCounts).reduce((a, b) => a + b, 0);
-      const moodPercents = {};
-      Object.entries(moodCounts).forEach(([mood, count]) => {
-        moodPercents[mood] = ((count / total) * 100).toFixed(1);
-      });
-      return { meal, moods: moodPercents, total };
-    });
-  };
+  useFocusEffect(
+    useCallback(() => {
+      loadData()
+    }, [])
+  )
+
+  const onRefresh = async () => {
+    setRefreshing(true)
+    await loadData()
+    setRefreshing(false)
+  }
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.heading}>Meal → Mood Correlations</Text>
+    <ScrollView
+      style={[styles.container, { backgroundColor: theme.background }]}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
+    >
+      <Text style={[styles.title, { color: theme.text }]}>Mood Trends</Text>
 
-      <View style={styles.filterRow}>
-        <Button title="Today" onPress={() => setFilter('today')} />
-        <Button title="Last 7 Days" onPress={() => setFilter('week')} />
-        <Button title="All Time" onPress={() => setFilter('all')} />
-      </View>
-
-      {patterns.length === 0 ? (
-        <Text style={styles.empty}>Not enough data yet.</Text>
+      {moodData ? (
+        <View style={styles.chartContainer}>
+          <LineChart
+            data={moodData}
+            width={screenWidth - 40}
+            height={220}
+            chartConfig={{
+              backgroundColor: theme.surface,
+              backgroundGradientFrom: theme.surface,
+              backgroundGradientTo: theme.surface,
+              decimalPlaces: 0,
+              color: (opacity = 1) => theme.primary,
+              labelColor: (opacity = 1) => theme.text,
+              style: {
+                borderRadius: 16
+              },
+              propsForDots: {
+                r: '6',
+                strokeWidth: '2',
+                stroke: theme.primary
+              }
+            }}
+            bezier
+            style={{
+              marginVertical: SPACING.s,
+              borderRadius: 16,
+              ...SHADOWS.small
+            }}
+          />
+          <Text style={[styles.chartHelp, { color: theme.textSecondary }]}>Recent mood history</Text>
+        </View>
       ) : (
-        patterns.map((item, index) => {
-          const chartData = Object.entries(item.moods).map(([mood, percent], i) => ({
-            name: `${mood} (${percent}%)`,
-            population: parseFloat(percent),
-            color: chartColors[i % chartColors.length],
-            legendFontColor: '#333',
-            legendFontSize: 14,
-          }));
-
-          return (
-            <View key={index} style={styles.patternBox}>
-              <Text style={styles.meal}>{item.meal} (n={item.total})</Text>
-              {Object.entries(item.moods).map(([mood, percent], i) => (
-                <Text key={i} style={styles.mood}>
-                  → {mood}: {percent}%
-                </Text>
-              ))}
-              <PieChart
-                data={chartData}
-                width={screenWidth - 40}
-                height={180}
-                chartConfig={{
-                  color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                }}
-                accessor="population"
-                backgroundColor="transparent"
-                paddingLeft="15"
-                absolute
-              />
-            </View>
-          );
-        })
+        <Card style={styles.emptyCard}>
+          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>Log some moods to see your trends!</Text>
+        </Card>
       )}
+
+      <Text style={[styles.title, { color: theme.text }]}>Insights</Text>
+      <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Meals that might have boosted your mood:</Text>
+
+      {correlations.length > 0 ? (
+        correlations.map((item, index) => (
+          <Card key={index} style={[styles.insightCard, { borderLeftColor: theme.success }]}>
+            <Text style={[styles.insightText, { color: theme.text }]}>
+              You felt <Text style={{ fontWeight: 'bold', color: theme.success }}>{item.mood} {item.emoji}</Text> after eating <Text style={{ fontWeight: 'bold', color: theme.primary }}>{item.meal}</Text>.
+            </Text>
+          </Card>
+        ))
+      ) : (
+        <Card style={styles.emptyCard}>
+          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+            No patterns found yet. Try logging meals and moods consistently!
+          </Text>
+        </Card>
+      )}
+
+      <View style={{ height: 40 }} />
     </ScrollView>
-  );
+  )
 }
 
-const chartColors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'];
-
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  heading: { fontSize: 20, fontWeight: 'bold', marginBottom: 10 },
-  empty: { fontSize: 14, color: 'gray', fontStyle: 'italic' },
-  patternBox: {
-    marginBottom: 25,
-    padding: 10,
-    borderWidth: 1,
-    borderRadius: 8,
-    borderColor: '#ddd',
-    backgroundColor: '#f9f9f9',
+  container: {
+    flex: 1,
+    padding: SPACING.m
   },
-  meal: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
-  mood: { fontSize: 16, marginLeft: 10 },
-  filterRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 15,
+  title: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: SPACING.s,
+    marginTop: SPACING.m,
+    fontFamily: FONTS.bold
   },
-});
+  subtitle: {
+    fontSize: 14,
+    marginBottom: SPACING.m,
+    fontFamily: FONTS.regular
+  },
+  chartContainer: {
+    alignItems: 'center',
+    marginBottom: SPACING.l
+  },
+  chartHelp: {
+    fontSize: 12,
+    marginTop: SPACING.xs,
+    fontFamily: FONTS.regular
+  },
+  emptyCard: {
+    padding: SPACING.xl,
+    alignItems: 'center'
+  },
+  emptyText: {
+    textAlign: 'center',
+    fontFamily: FONTS.regular
+  },
+  insightCard: {
+    borderLeftWidth: 5
+  },
+  insightText: {
+    fontSize: 16,
+    lineHeight: 24,
+    fontFamily: FONTS.regular
+  }
+})
